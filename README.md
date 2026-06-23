@@ -9,15 +9,15 @@ Modelul este evaluat prin validare încrucișată pe grupuri (StratifiedGroupKFo
 scurgerea de informație între ferestre apropiate temporal.
 
 Aplicația demonstrativă (ESP32 + MPU-6050) arată că lanțul complet — achiziție de la senzor,
-extragere de caracteristici și clasificare — funcționează în timp real. Demonstratorul validează
+extragere de caracteristici și clasificare- funcționează în timp real. Demonstratorul validează
 lanțul de achiziție, nu diagnoza pe hardware real (modelul este antrenat pe un alt tip de imprimantă).
 
 ## Structură
 
-- `notebook/` — antrenarea modelului, graficele și exportul modelelor
-- `app/app.py` — aplicația demonstrativă (Live 6 clase / Normal-Defect / Colectare / Analiză CSV / Replay)
-- `app/firmware/` — firmware-ul ESP32 pentru achiziția de la accelerometru
-- `export/` — modele antrenate (`.joblib`), scalere, encodere și seturile de verificare
+- `notebook/` - antrenarea modelului, graficele și exportul modelelor
+- `app/app.py` - aplicația demonstrativă (Live 6 clase / Normal-Defect / Colectare / Analiză CSV / Replay)
+- `app/firmware/` - firmware-ul ESP32 pentru achiziția de la accelerometru
+- `export/` - modele antrenate (`.joblib`), scalere, encodere și seturile de verificare
 
 ## Instalare
 
