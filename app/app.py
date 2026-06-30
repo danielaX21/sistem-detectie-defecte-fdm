@@ -1,28 +1,4 @@
-"""
-app.py
-------
-Aplicatie unica (Streamlit) care reuneste toate modurile demo intr-un singur
-meniu, in loc de scripturi separate:
-
-    1. Live - 6 clase        (model_s1,     1 senzor, 45 features)
-    2. Live - Normal/Defect  (model_s1_bin, 1 senzor, 45 features)
-    3. Replay dataset        (model_demo + demo_set.csv, fara hardware)
-    4. Analiza fisier CSV    (incarci un CSV colectat la lab si vezi predictiile)
-
-Cum se ruleaza:
-    streamlit run app.py
-
-Fisiere necesare in folderul export/:
-    - Live 6 clase:        model_s1.joblib, scaler_s1.joblib, label_encoder.joblib
-    - Live Normal/Defect:  model_s1_bin.joblib, scaler_s1_bin.joblib, label_encoder_bin.joblib
-    - Replay:              model_demo.joblib, scaler.joblib, label_encoder.joblib, demo_set.csv
-    - Analiza CSV:         model_s1.joblib, scaler_s1.joblib, label_encoder.joblib
-
-Nota onesta (de mentionat in lucrare si la sustinere): demonstratorul valideaza
-LANTUL de achizitie si inferenta in timp real, nu diagnoza pe hardware real.
-MPU-6050 are 3 axe, modelul pe 1 senzor (45 features) este antrenat exact pe 3 axe,
-deci nu se mai dubleaza artificial nimic.
-"""
+"""Aplicatie Streamlit pentru clasificarea starilor unei imprimante 3D FDM din semnal de vibratie."""
 
 from collections import deque
 from pathlib import Path
@@ -43,12 +19,9 @@ except ImportError:
     SERIAL_OK = False
 
 
-# ============================================================
-# CONFIG
-# ============================================================
 EXPORT_DIR = Path('export')
 WINDOW_SIZE = 512
-DECIM_FACTOR = 5          # 1000 Hz -> ~200 Hz
+DECIM_FACTOR = 5
 DEFAULT_BAUD = 115200
 
 CULORI = {
@@ -62,9 +35,6 @@ def culoare_clasa(label: str) -> str:
     return CULORI.get(label.lower(), CULORI.get(label, '#888888'))
 
 
-# ============================================================
-# FEATURE EXTRACTION (3 axe -> 45 features)
-# ============================================================
 def extract_45(window_3ax: np.ndarray) -> np.ndarray:
     feat = []
     for ax_idx in range(3):
@@ -86,9 +56,6 @@ def extract_45(window_3ax: np.ndarray) -> np.ndarray:
     return np.array(feat, dtype=np.float64)
 
 
-# ============================================================
-# LOADERS (returneaza None daca lipsesc fisierele)
-# ============================================================
 def _try_load(*paths):
     if not all(Path(p).exists() for p in paths):
         return None
@@ -111,7 +78,6 @@ def load_binary():
 
 @st.cache_resource
 def load_replay():
-    """Varianta veche, un singur bloc (9): model_demo + scaler + demo_set.csv."""
     files = _try_load(EXPORT_DIR / 'model_demo.joblib',
                       EXPORT_DIR / 'scaler.joblib',
                       EXPORT_DIR / 'label_encoder.joblib')
@@ -122,7 +88,6 @@ def load_replay():
 
 
 def available_replay_blocks():
-    """Blocurile pentru care exista fisiere demo_set_b{B}.csv in export/."""
     blocks = []
     for p in EXPORT_DIR.glob('demo_set_b*.csv'):
         try:
@@ -134,7 +99,6 @@ def available_replay_blocks():
 
 @st.cache_resource
 def load_replay_block(b: int):
-    """Modelul leave-one-block-out pentru blocul b (testat exact pe blocul b)."""
     files = _try_load(EXPORT_DIR / f'model_demo_b{b}.joblib',
                       EXPORT_DIR / f'scaler_demo_b{b}.joblib',
                       EXPORT_DIR / 'label_encoder.joblib')
@@ -144,9 +108,6 @@ def load_replay_block(b: int):
     return files + [demo_df]
 
 
-# ============================================================
-# SERIAL HELPERS
-# ============================================================
 def get_serial_ports() -> list:
     if not SERIAL_OK:
         return []
@@ -185,15 +146,14 @@ def reset_live_buffers():
 
 
 def serial_sidebar():
-    """Conexiunea ESP32; intoarce True daca e conectat."""
     if not SERIAL_OK:
-        st.sidebar.error('pyserial nu e instalat. Ruleaza: pip install pyserial')
+        st.sidebar.error('pyserial nu este instalat. Ruleaza: pip install pyserial')
         return False
 
     ports = get_serial_ports()
     if not ports:
-        st.sidebar.warning('Niciun port COM. Conecteaza ESP32 prin USB.')
-        if st.sidebar.button('🔄 Refresh porturi'):
+        st.sidebar.warning('Niciun port COM detectat. Conecteaza ESP32 prin USB.')
+        if st.sidebar.button('Refresh porturi'):
             st.rerun()
         return False
 
@@ -201,7 +161,7 @@ def serial_sidebar():
     baud = st.sidebar.number_input('Baud rate', value=DEFAULT_BAUD, step=1200)
 
     if not st.session_state.connected:
-        if st.sidebar.button('🔌 Conecteaza', use_container_width=True, type='primary'):
+        if st.sidebar.button('Conecteaza', use_container_width=True, type='primary'):
             try:
                 ser = serial.Serial(port, baud, timeout=0.05)
                 time.sleep(2)
@@ -213,7 +173,7 @@ def serial_sidebar():
             except Exception as e:
                 st.sidebar.error(f'Eroare conexiune: {e}')
     else:
-        if st.sidebar.button('🛑 Deconecteaza', use_container_width=True):
+        if st.sidebar.button('Deconecteaza', use_container_width=True):
             if st.session_state.serial_conn:
                 st.session_state.serial_conn.close()
             st.session_state.serial_conn = None
@@ -222,7 +182,7 @@ def serial_sidebar():
 
     st.sidebar.metric('Sample-uri pastrate', f'{st.session_state.total_samples:,}')
     st.sidebar.metric('Buffer', f'{len(st.session_state.buffer_x)} / {WINDOW_SIZE}')
-    if st.sidebar.button('🗑️ Reset buffere'):
+    if st.sidebar.button('Reset buffere'):
         reset_live_buffers()
         st.rerun()
 
@@ -230,7 +190,6 @@ def serial_sidebar():
 
 
 def read_serial_and_predict(model, scaler, encoder):
-    """Citeste serial (cu decimare), iar la fereastra completa prezice."""
     ser = st.session_state.serial_conn
     t_start = time.time()
     while time.time() - t_start < 0.2:
@@ -277,7 +236,6 @@ def read_serial_and_predict(model, scaler, encoder):
 
 
 def render_prediction(encoder, big: bool = False):
-    """Afiseaza badge-ul cu predictia + bar chart de probabilitati + grafic live."""
     col1, col2 = st.columns([1, 1.3])
     with col1:
         st.subheader('Stare curenta')
@@ -289,14 +247,14 @@ def render_prediction(encoder, big: bool = False):
                 f"""
                 <div style="background:{culoare_clasa(pred)}; padding:36px;
                             border-radius:12px; text-align:center; color:white;">
-                    <div style="font-size:14px; opacity:0.85;">PREDICTIE LIVE</div>
+                    <div style="font-size:14px; opacity:0.85;">PREDICTIE</div>
                     <div style="font-size:{font}; font-weight:800; margin:6px 0;">
                         {pred.upper()}</div>
                     <div style="font-size:16px;">Confidence: {conf*100:.1f}%</div>
                 </div>
                 """, unsafe_allow_html=True)
         else:
-            st.info(f'Aduna sample-uri... ({len(st.session_state.buffer_x)} / {WINDOW_SIZE})')
+            st.info(f'Se acumuleaza sample-uri ({len(st.session_state.buffer_x)} / {WINDOW_SIZE}).')
 
     with col2:
         st.subheader('Probabilitati')
@@ -322,15 +280,11 @@ def render_prediction(encoder, big: bool = False):
                           (st.session_state.plot_z, 'acc_z')]:
             fig.add_trace(go.Scatter(x=x_axis, y=list(buf), name=nume, line=dict(width=1)))
         fig.update_layout(height=260, margin=dict(l=0, r=0, t=10, b=10),
-                          xaxis_title='Sample', yaxis_title='Acc (m/s²)')
+                          xaxis_title='Sample', yaxis_title='Acc (m/s^2)')
         st.plotly_chart(fig, use_container_width=True)
 
 
-# ============================================================
-# MODURI
-# ============================================================
 def mode_live(task: str):
-    """task = 'multi' sau 'binary'."""
     init_live_state()
     artifacts = load_multiclass() if task == 'multi' else load_binary()
     if artifacts is None:
@@ -339,10 +293,10 @@ def mode_live(task: str):
         return
     model, scaler, encoder = artifacts
 
-    titlu = 'Live — clasificare in 6 stari' if task == 'multi' else 'Live — Normal vs. Defect'
+    titlu = 'Live - clasificare in 6 stari' if task == 'multi' else 'Live - Normal vs. Defect'
     st.title(titlu)
-    st.caption('Model pe 1 senzor (3 axe, 45 features). Date decimate la ~200 Hz, '
-               f'ferestre de {WINDOW_SIZE}.')
+    st.caption('Model pe un singur senzor (3 axe, 45 caracteristici). '
+               f'Date decimate la ~200 Hz, ferestre de {WINDOW_SIZE} esantioane.')
 
     st.sidebar.header('Conexiune ESP32')
     connected = serial_sidebar()
@@ -366,15 +320,11 @@ def mode_live(task: str):
 
 
 def mode_replay():
-    st.title('Replay pe date din dataset (fara hardware)')
+    st.title('Replay pe date din set (fara hardware)')
 
-    # Selector de bloc holdout: daca exista mai multe modele leave-one-block-out,
-    # poti alege pe ce bloc se testeaza (dovada ca nu e hardcodat pe un singur bloc).
     blocks = available_replay_blocks()
     if blocks:
-        b = st.sidebar.selectbox('Bloc holdout', blocks,
-                                 index=len(blocks) - 1,
-                                 help='Modelul corespunzator NU a vazut acest bloc la antrenare.')
+        b = st.sidebar.selectbox('Bloc holdout', blocks, index=len(blocks) - 1)
         if st.session_state.get('rp_block') != b:
             st.session_state.rp_block = b
             st.session_state.rp_idx = 0
@@ -387,16 +337,13 @@ def mode_replay():
         eticheta_bloc = 'blocul 9'
 
     if artifacts is None:
-        st.error('Lipsesc fisierele pentru replay din "export/". Ai nevoie fie de '
-                 'model_demo.joblib + scaler.joblib + demo_set.csv (un bloc), fie de '
-                 'model_demo_b*.joblib + scaler_demo_b*.joblib + demo_set_b*.csv (mai multe blocuri). '
-                 'Descarca-le din Colab.')
+        st.error('Lipsesc fisierele pentru replay din "export/": model_demo*, scaler*, demo_set*.csv.')
         return
     model, scaler, encoder, demo_df = artifacts
     feature_cols = [c for c in demo_df.columns if c not in ('label_true', 'label_idx')]
 
-    st.caption(f'Model demo testat pe {eticheta_bloc}: {len(demo_df)} ferestre nevazute la '
-               'antrenare. Predictii cinstite metodologic, calculate live (nu stocate).')
+    st.caption(f'Model testat pe {eticheta_bloc}: {len(demo_df)} ferestre care nu au fost '
+               'folosite la antrenare.')
 
     if 'rp_idx' not in st.session_state:
         st.session_state.rp_idx = 0
@@ -407,15 +354,15 @@ def mode_replay():
     c1, c2 = st.sidebar.columns(2)
     with c1:
         if not st.session_state.rp_running:
-            if st.button('▶ Start', use_container_width=True, type='primary'):
+            if st.button('Start', use_container_width=True, type='primary'):
                 st.session_state.rp_running = True
                 st.rerun()
         else:
-            if st.button('⏸ Pauza', use_container_width=True):
+            if st.button('Pauza', use_container_width=True):
                 st.session_state.rp_running = False
                 st.rerun()
     with c2:
-        if st.button('⟲ Reset', use_container_width=True):
+        if st.button('Reset', use_container_width=True):
             st.session_state.rp_idx = 0
             st.session_state.rp_running = False
             st.session_state.rp_hist = []
@@ -449,16 +396,17 @@ def mode_replay():
         st.markdown(
             f"""<div style="background:{culoare_clasa(pred)}; padding:30px;
                     border-radius:12px; text-align:center; color:white;">
-                <div style="font-size:14px; opacity:.85;">PREDICTIE MODEL</div>
+                <div style="font-size:14px; opacity:.85;">PREDICTIE</div>
                 <div style="font-size:38px; font-weight:800; margin:6px 0;">{pred.upper()}</div>
                 <div style="font-size:16px;">Confidence: {probs[pred_idx]*100:.1f}%</div>
                 </div>""", unsafe_allow_html=True)
+        verdict = 'CORECT' if ok else 'GRESIT'
         st.markdown(
             f"""<div style="border:2px solid {culoare_clasa(true)}; margin-top:12px;
                     padding:12px; border-radius:8px; text-align:center;">
                 <div style="font-size:13px; color:#666;">ETICHETA REALA</div>
                 <div style="font-size:22px; font-weight:700;">{true}</div>
-                <div style="margin-top:4px;">{'✅ CORECT' if ok else '❌ GRESIT'}</div>
+                <div style="margin-top:4px;">{verdict}</div>
                 </div>""", unsafe_allow_html=True)
     with c2:
         st.subheader('Probabilitati')
@@ -480,15 +428,11 @@ def mode_replay():
 
 def mode_csv():
     st.title('Analiza fisier CSV colectat')
-    st.caption('Incarci un CSV (timestamp, acc_x, acc_y, acc_z, label) si vezi '
-               'predictiile pe fiecare fereastra de 512 sample-uri.')
+    st.caption('Incarca un CSV (timestamp, acc_x, acc_y, acc_z, label) si afiseaza '
+               f'predictiile pe fiecare fereastra de {WINDOW_SIZE} esantioane.')
 
-    tip_analiza = st.radio(
-        'Model folosit pentru analiza',
-        ['6 clase', 'Normal/Defect'],
-        horizontal=True,
-        help='Pentru date colectate pe Ender, varianta Normal/Defect este mai potrivita.'
-    )
+    tip_analiza = st.radio('Model folosit pentru analiza',
+                           ['6 clase', 'Normal/Defect'], horizontal=True)
 
     artifacts = load_multiclass() if tip_analiza == '6 clase' else load_binary()
     if artifacts is None:
@@ -502,7 +446,7 @@ def mode_csv():
     ultim = st.session_state.get('ultimul_csv')
     sursa = None
     if ultim and Path(ultim).exists():
-        if st.button(f'📄 Foloseste ultimul fisier colectat ({ultim})'):
+        if st.button(f'Foloseste ultimul fisier colectat ({ultim})'):
             sursa = ultim
 
     up = st.file_uploader('Sau alege un fisier CSV', type=['csv', 'txt'])
@@ -510,7 +454,7 @@ def mode_csv():
         sursa = up
 
     if sursa is None:
-        st.info('Incarca un CSV, sau colecteaza unul din modul "Colectare date".')
+        st.info('Incarca un CSV sau colecteaza unul din modul "Colectare date".')
         return
 
     df = pd.read_csv(sursa)
@@ -565,9 +509,9 @@ def mode_csv():
         if label_eval is not None and label_eval in set(encoder.classes_):
             match = (preds == label_eval).mean() * 100
             st.info(f'Eticheta din CSV: **{label_true}** (evaluata ca **{label_eval}**). '
-                    f'Match cu predictia: **{match:.1f}%** din ferestre.')
+                    f'Concordanta cu predictia: **{match:.1f}%** din ferestre.')
         else:
-            st.info(f'Eticheta din CSV: **{label_true}**. Nu se calculeaza match automat, '
+            st.info(f'Eticheta din CSV: **{label_true}**. Concordanta nu se calculeaza automat, '
                     'deoarece eticheta nu corespunde claselor modelului selectat.')
 
     st.subheader('Predictii pe primele ferestre')
@@ -582,16 +526,16 @@ def mode_csv():
 def mode_collect():
     st.title('Colectare date de la senzor (ESP32 + MPU-6050)')
     st.caption('Inregistreaza un semnal etichetat si salveaza un CSV '
-               '(timestamp, acc_x, acc_y, acc_z, label) pe care il poti analiza apoi.')
+               '(timestamp, acc_x, acc_y, acc_z, label).')
 
     if not SERIAL_OK:
-        st.error('pyserial nu e instalat. Ruleaza: pip install pyserial')
+        st.error('pyserial nu este instalat. Ruleaza: pip install pyserial')
         return
 
     ports = get_serial_ports()
     if not ports:
-        st.warning('Niciun port COM. Conecteaza ESP32 prin USB.')
-        if st.button('🔄 Refresh porturi'):
+        st.warning('Niciun port COM detectat. Conecteaza ESP32 prin USB.')
+        if st.button('Refresh porturi'):
             st.rerun()
         return
 
@@ -603,15 +547,15 @@ def mode_collect():
         baud = st.number_input('Baud rate', value=DEFAULT_BAUD, step=1200)
         durata = st.number_input('Durata (secunde)', value=30, min_value=5, step=5)
 
-    skip_primele = 100        # ignor primele sample-uri (garbage la pornire)
-    valoare_max = 100         # filtru outlieri (m/s^2)
+    skip_primele = 100
+    valoare_max = 100
 
-    if st.button('⏺️ Start colectare', type='primary'):
+    if st.button('Start colectare', type='primary'):
         try:
             ser = serial.Serial(port, baud, timeout=1)
         except Exception as e:
             st.error(f'Nu pot deschide {port}: {e}. '
-                     'Inchide Arduino Serial Monitor daca e deschis.')
+                     'Inchide Arduino Serial Monitor daca este deschis.')
             return
 
         time.sleep(2)
@@ -653,13 +597,13 @@ def mode_collect():
             progres.progress(min(elapsed / durata, 1.0))
             if len(rows) % 200 == 0:
                 rate = len(rows) / elapsed if elapsed > 0 else 0
-                status.write(f'{elapsed:4.1f}s · {len(rows)} sample-uri salvate · ~{rate:.0f} Hz')
+                status.write(f'{elapsed:4.1f}s - {len(rows)} sample-uri salvate - ~{rate:.0f} Hz')
 
         ser.close()
         progres.progress(1.0)
 
         if len(rows) < WINDOW_SIZE:
-            st.error(f'Doar {len(rows)} sample-uri valide (< {WINDOW_SIZE}). '
+            st.error(f'Doar {len(rows)} sample-uri valide (sub {WINDOW_SIZE}). '
                      'Colecteaza mai mult sau verifica senzorul.')
             return
 
@@ -669,35 +613,30 @@ def mode_collect():
         st.session_state['ultimul_csv'] = nume
 
         durata_reala = time.time() - t0
-        st.success(f'Colectare gata: {len(df)} sample-uri in {durata_reala:.1f}s '
+        st.success(f'Colectare finalizata: {len(df)} sample-uri in {durata_reala:.1f}s '
                    f'(~{len(df)/durata_reala:.0f} Hz). Salvat ca {nume}.')
         st.caption(f'Outlieri ignorati: {nr_outlier}. '
                    f'Ferestre posibile de {WINDOW_SIZE}: {len(df)//WINDOW_SIZE}.')
 
-        st.download_button('⬇️ Descarca CSV', data=df.to_csv(index=False),
+        st.download_button('Descarca CSV', data=df.to_csv(index=False),
                            file_name=nume, mime='text/csv')
-        st.info('Acum poti trece la modul "Analiza fisier CSV" si incarca fisierul '
-                'salvat ca sa vezi predictiile pe fereastra.')
+        st.info('Treci la modul "Analiza fisier CSV" si incarca fisierul salvat.')
 
 
-# ============================================================
-# MAIN
-# ============================================================
 def main():
-    st.set_page_config(page_title='Detectie defecte imprimante 3D',
-                       page_icon='⚙️', layout='wide')
+    st.set_page_config(page_title='Detectie defecte imprimante 3D', layout='wide')
 
-    st.sidebar.title('⚙️ Demo licenta')
+    st.sidebar.title('Detectie defecte imprimante 3D')
     mod = st.sidebar.radio(
         'Mod de lucru',
-        ['Live — 6 clase', 'Live — Normal/Defect', 'Colectare date',
+        ['Live - 6 clase', 'Live - Normal/Defect', 'Colectare date',
          'Analiza fisier CSV', 'Replay dataset'],
     )
     st.sidebar.markdown('---')
 
-    if mod == 'Live — 6 clase':
+    if mod == 'Live - 6 clase':
         mode_live('multi')
-    elif mod == 'Live — Normal/Defect':
+    elif mod == 'Live - Normal/Defect':
         mode_live('binary')
     elif mod == 'Colectare date':
         mode_collect()
@@ -705,10 +644,6 @@ def main():
         mode_csv()
     else:
         mode_replay()
-
-    st.sidebar.markdown('---')
-    st.sidebar.caption('Demonstratorul valideaza lantul de achizitie si inferenta '
-                       'in timp real, nu diagnoza pe hardware real.')
 
 
 if __name__ == '__main__':
