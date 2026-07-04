@@ -286,6 +286,13 @@ def render_prediction(encoder, big: bool = False):
 
 def mode_live(task: str):
     init_live_state()
+    # la schimbarea tipului de model (6 stari <-> normal/defect), curata predictiile vechi:
+    # altfel vectorul de probabilitati vechi nu se potriveste cu noul set de clase
+    if st.session_state.get('live_task') != task:
+        st.session_state.live_task = task
+        st.session_state.last_prediction = None
+        st.session_state.last_probs = None
+        st.session_state.pred_history = []
     artifacts = load_multiclass() if task == 'multi' else load_binary()
     if artifacts is None:
         need = ('model_s1' if task == 'multi' else 'model_s1_bin')
@@ -527,6 +534,15 @@ def mode_collect():
     st.title('Colectare date de la senzor (ESP32 + MPU-6050)')
     st.caption('Inregistreaza un semnal etichetat si salveaza un CSV '
                '(timestamp, acc_x, acc_y, acc_z, label).')
+
+    # elibereaza portul serial daca a ramas deschis din modul Live
+    if st.session_state.get('serial_conn') is not None:
+        try:
+            st.session_state.serial_conn.close()
+        except Exception:
+            pass
+        st.session_state.serial_conn = None
+        st.session_state.connected = False
 
     if not SERIAL_OK:
         st.error('pyserial nu este instalat. Ruleaza: pip install pyserial')
