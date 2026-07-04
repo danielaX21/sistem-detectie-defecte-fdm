@@ -1,4 +1,6 @@
-# Sistem de detecție și clasificare a defectelor la imprimantele 3D FDM prin analiza vibrațiilor
+# Sistem de monitorizare și detecție a defectelor la
+imprimantele 3D prin analiza vibrațiilor și învățare
+automată
 
 Lucrare de licență — sistem de detecție și clasificare a stărilor de funcționare ale unei
 imprimante 3D FDM pe baza semnalului de vibrație și a unui model Random Forest.
