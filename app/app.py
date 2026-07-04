@@ -293,7 +293,7 @@ def mode_live(task: str):
         return
     model, scaler, encoder = artifacts
 
-    titlu = 'Live - clasificare in 6 stari' if task == 'multi' else 'Live - Normal vs. Defect'
+    titlu = 'Clasificare live — 6 stări' if task == 'multi' else 'Clasificare live — normal vs. defect'
     st.title(titlu)
     st.caption('Model pe un singur senzor (3 axe, 45 caracteristici). '
                f'Date decimate la ~200 Hz, ferestre de {WINDOW_SIZE} esantioane.')
@@ -320,7 +320,7 @@ def mode_live(task: str):
 
 
 def mode_replay():
-    st.title('Replay pe date din set (fara hardware)')
+    st.title('Evaluare pe date de test (fără hardware)')
 
     blocks = available_replay_blocks()
     if blocks:
@@ -337,7 +337,7 @@ def mode_replay():
         eticheta_bloc = 'blocul 9'
 
     if artifacts is None:
-        st.error('Lipsesc fisierele pentru replay din "export/": model_demo*, scaler*, demo_set*.csv.')
+        st.error('Lipsesc fișierele necesare din "export/": model_demo*, scaler*, demo_set*.csv.')
         return
     model, scaler, encoder, demo_df = artifacts
     feature_cols = [c for c in demo_df.columns if c not in ('label_true', 'label_idx')]
@@ -375,7 +375,7 @@ def mode_replay():
                           f'{ok/len(st.session_state.rp_hist)*100:.1f}%')
 
     if st.session_state.rp_idx >= len(demo_df):
-        st.success('Replay terminat. Apasa Reset pentru a relua.')
+        st.success('Evaluare terminată. Apasă Reset pentru a relua.')
         st.session_state.rp_running = False
         return
 
@@ -427,7 +427,7 @@ def mode_replay():
 
 
 def mode_csv():
-    st.title('Analiza fisier CSV colectat')
+    st.title('Analiză înregistrare')
     st.caption('Incarca un CSV (timestamp, acc_x, acc_y, acc_z, label) si afiseaza '
                f'predictiile pe fiecare fereastra de {WINDOW_SIZE} esantioane.')
 
@@ -620,27 +620,27 @@ def mode_collect():
 
         st.download_button('Descarca CSV', data=df.to_csv(index=False),
                            file_name=nume, mime='text/csv')
-        st.info('Treci la modul "Analiza fisier CSV" si incarca fisierul salvat.')
+        st.info('Treci la modul "Analiză înregistrare" și încarcă fișierul salvat.')
 
 
 def main():
-    st.set_page_config(page_title='Detectie defecte imprimante 3D', layout='wide')
+    st.set_page_config(page_title='Detecția defectelor la imprimante 3D', layout='wide')
 
-    st.sidebar.title('Detectie defecte imprimante 3D')
+    st.sidebar.title('Detecția defectelor la imprimante 3D')
     mod = st.sidebar.radio(
         'Mod de lucru',
-        ['Live - 6 clase', 'Live - Normal/Defect', 'Colectare date',
-         'Analiza fisier CSV', 'Replay dataset'],
+        ['Clasificare live (6 stări)', 'Clasificare live (normal/defect)',
+         'Colectare date', 'Analiză înregistrare', 'Evaluare pe date de test'],
     )
     st.sidebar.markdown('---')
 
-    if mod == 'Live - 6 clase':
+    if mod == 'Clasificare live (6 stări)':
         mode_live('multi')
-    elif mod == 'Live - Normal/Defect':
+    elif mod == 'Clasificare live (normal/defect)':
         mode_live('binary')
     elif mod == 'Colectare date':
         mode_collect()
-    elif mod == 'Analiza fisier CSV':
+    elif mod == 'Analiză înregistrare':
         mode_csv()
     else:
         mode_replay()
